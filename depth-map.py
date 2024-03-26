@@ -3,6 +3,17 @@ import numpy as np
 import pyrealsense2 as rs
 from datetime import datetime
 
+def get_distance_at_point(depth_frame, x, y):
+    depth_value = depth_frame.get_distance(x, y)
+    distance = depth_value * 100  # Convert depth value to centimeters (assuming depth is in meters)
+    return distance
+
+def on_mouse_click(event, x, y, flags, param):
+    if event == cv2.EVENT_LBUTTONDOWN:
+        distance = get_distance_at_point(processed_depth_frame, x, y)
+        print(f"Distance at point ({x}, {y}): {distance} cm")
+
+
 def save_depth_data(depth_data):
     filename = f"depth_data_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
     np.savetxt(filename, depth_data, fmt='%d', delimiter='\t')
