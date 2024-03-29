@@ -1,9 +1,4 @@
 """
-Project: AI Robot - Human Following
-Author: Jitesh Saini
-Github: https://github.com/jiteshsaini
-website: https://helloworld.co.in
-
 - The robot uses PiCamera to capture a frame. 
 - Presence of human in the frame is detected using Machine Learning moldel & TensorFlow Lite interpreter.
 - Using OpenCV, the frame is overlayed with information such as bounding boxes, center coordinates of the person, deviation of the person from center of the frame etc.
