@@ -20,6 +20,7 @@ import numpy as np
 from PIL import Image
 import time
 from threading import Thread
+import pyrealsense2 as rs
 
 import sys
 sys.path.insert(0, '/var/www/html/earthrover')
@@ -78,6 +79,54 @@ pin21.start(val)              # start pin21 on 0 percent duty cycle (off)
 print("speed set to: ", val)
 #------------------------------------------
 
+def capture_rgb():
+    pipeline = rs.pipeline()
+    config = rs.config()
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+
+    pipeline.start(config)
+
+    try:
+        frames = pipeline.wait_for_frames()
+        color_frame = frames.get_color_frame()
+
+        if color_frame:
+            rgb_image = np.asanyarray(color_frame.get_data())
+            rgb_image = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB)
+            rgb_image = Image.fromarray(rgb_image)
+
+        return rgb_image
+
+    finally:
+        pipeline.stop()
+
+def capture_depth():
+    pipeline = rs.pipeline()
+    config = rs.config()
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    decimation = rs.decimation_filter()
+    spatial = rs.spatial_filter()
+    temporal = rs.temporal_filter()
+    disparity_to_depth = rs.disparity_transform(True)
+    depth_to_disparity = rs.disparity_transform(False)
+    hole_filling = rs.hole_filling_filter()
+
+    pipeline.start(config)
+
+    try:
+        frames = pipeline.wait_for_frames()
+        depth_frame = frames.get_depth_frame()
+
+        if depth_frame:
+            depth_image = temporal.process(spatial.process(depth_to_disparity.process(decimation.process(depth_frame))))
+            depth_image = np.asanyarray(depth_frame.get_data())
+            depth_image = cv2.cvtColor(depth_image, cv2.COLOR_Z16, cv2.COLOR_BGR2RGB)
+            depth_image = Image.fromarray(depth_image)
+
+        return depth_image
+
+    finally:
+        pipeline.stop()
 def track_object(objs,labels):
    
     global x_deviation, y_max, tolerance, arr_track_data
@@ -99,7 +148,7 @@ def track_object(objs,labels):
         
     #print(x_min, y_min, x_max, y_max)
     if(flag==0):
-        print("selected object no present")
+        print("selected object not present")
         return
         
     x_diff=x_max-x_min
@@ -129,7 +178,9 @@ def track_object(objs,labels):
     arr_track_data[2]=x_deviation
     arr_track_data[3]=y_max
     
-
+# TODO: change the code so that it uses the depth map to find the distance between object and robot
+# TODO: add the case where there might be an obstruction in front of the robot
+# TODO: add the case where there might a dip like stairs or something in front of the robot
 def move_robot():
     global x_deviation, y_max, tolerance, arr_track_data
     
@@ -198,19 +249,20 @@ def main():
     
     while True:
         start_time=time.time()
-        
+        # time is being used to calculate the time that is being taken to carry out different operations
         #----------------Capture Camera Frame-----------------
         start_t0=time.time()
-        ret, frame = cap.read()
-        if not ret:
-            break
+        # ret, frame = cap.read() # ret is a boolean variable telling whether the image was taken successfully or not
+        # if not ret:
+        #     break
         
-        cv2_im = frame
-        cv2_im = cv2.flip(cv2_im, 0)
-        cv2_im = cv2.flip(cv2_im, 1)
+        # cv2_im = frame
+        # cv2_im = cv2.flip(cv2_im, 0)
+        # cv2_im = cv2.flip(cv2_im, 1)
 
-        cv2_im_rgb = cv2.cvtColor(cv2_im, cv2.COLOR_BGR2RGB)
-        pil_im = Image.fromarray(cv2_im_rgb)
+        # cv2_im_rgb = cv2.cvtColor(cv2_im, cv2.COLOR_BGR2RGB)
+        # pil_im = Image.fromarray(cv2_im_rgb)
+        pil_im = capture_rgb()
        
         arr_dur[0]=time.time() - start_t0
         #----------------------------------------------------
