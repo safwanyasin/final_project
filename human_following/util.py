@@ -1,11 +1,3 @@
-'''
-Project: Earthrover Robot
-Author: Jitesh Saini
-Github: https://github.com/jiteshsaini
-website: https://helloworld.co.in
-
-'''
-
 import RPi.GPIO as GPIO
 GPIO.setwarnings(False)
 

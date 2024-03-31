@@ -1,6 +1,3 @@
-#Project: Earthrover
-#Created by: Jitesh Saini
-
 import time,os
 import sys
 
