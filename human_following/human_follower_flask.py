@@ -28,7 +28,7 @@ import util as ut
 ut.init_gpio()
 
 cap = cv2.VideoCapture(0)
-threshold=0.2
+threshold=0.3 # changed from 0.2 to 0.3
 top_k=5 #first five objects with prediction probability above threshhold (0.2) to be considered
 #edgetpu=0
 
@@ -37,7 +37,7 @@ model = 'mobilenet_ssd_v2_coco_quant_postprocess.tflite'
 model_edgetpu = 'mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite'
 lbl = 'coco_labels.txt'
 
-tolerance=0.1
+tolerance=0.15 # changed from 0.1 to 0.15
 x_deviation=0
 y_max=0
 arr_track_data=[0,0,0,0,0,0]
