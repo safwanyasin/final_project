@@ -178,7 +178,7 @@ def track_object(objs,labels):
     arr_track_data[2]=x_deviation
     arr_track_data[3]=y_max
     
-# TODO: change the code so that it uses the depth map to find the distance between object and robot
+# TODO: change the code so that it uses the depth map to find the distance between object and robot and then uses it for movement
 # TODO: add the case where there might be an obstruction in front of the robot
 # TODO: add the case where there might a dip like stairs or something in front of the robot
 def move_robot():
