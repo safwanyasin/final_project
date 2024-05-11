@@ -144,13 +144,15 @@ def track_object(objs,labels):
         if (lbl==object_to_track):
             x_min, y_min, x_max, y_max = list(obj.bbox)
             flag=1
+            # can add the code here that would look for objects that might be in the way of the person
             break
         
     #print(x_min, y_min, x_max, y_max)
     if(flag==0):
         print("selected object not present")
         return
-        
+
+    # calculating the angles and directions the robot has to move    
     x_diff=x_max-x_min
     y_diff=y_max-y_min
     print("x_diff: ",round(x_diff,5))
