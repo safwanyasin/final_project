@@ -3,7 +3,7 @@ GPIO.setwarnings(False)
 
 import os, time
 
-edgetpu=0 # If Coral USB Accelerator connected, then make it '1' otherwise '0'
+# edgetpu=0 # If Coral USB Accelerator connected, then make it '1' otherwise '0'
 
 m1_1 = 8
 m1_2 = 11
@@ -80,11 +80,11 @@ def head_lights(state):
 		GPIO.output(headlight_right, False)
 		#print("light off")
 		
-def red_light(state):
-	if(state=="ON"):
-		GPIO.output(sp_light, True)
-		#print("light on")
-	else:
-		GPIO.output(sp_light, False)
-		#print("light off")
+# def red_light(state):
+# 	if(state=="ON"):
+# 		GPIO.output(sp_light, True)
+# 		#print("light on")
+# 	else:
+# 		GPIO.output(sp_light, False)
+# 		#print("light off")
 	

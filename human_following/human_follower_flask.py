@@ -3,7 +3,6 @@
 - Presence of human in the frame is detected using Machine Learning moldel & TensorFlow Lite interpreter.
 - Using OpenCV, the frame is overlayed with information such as bounding boxes, center coordinates of the person, deviation of the person from center of the frame etc.
 - FLASK is used for streaming the robot's view over LAN (accessed via browser).
-- Google Coral USB Accelerator should be used to accelerate the inferencing process.
 
 When Coral USB Accelerator is connected, amend line 14 of util.py as:-
 edgetpu = 1 
@@ -32,9 +31,9 @@ threshold=0.3 # changed from 0.2 to 0.3
 top_k=5 #first five objects with prediction probability above threshhold (0.2) to be considered
 #edgetpu=0
 
-model_dir = '/var/www/html/all_models'
+model_dir = '../models'
 model = 'mobilenet_ssd_v2_coco_quant_postprocess.tflite'
-model_edgetpu = 'mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite'
+# model_edgetpu = 'mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite'
 lbl = 'coco_labels.txt'
 
 tolerance=0.15 # changed from 0.1 to 0.15
@@ -134,7 +133,6 @@ def track_object(objs,labels):
     if(len(objs)==0):
         print("no objects to track")
         ut.stop()
-        ut.red_light("OFF")
         arr_track_data=[0,0,0,0,0,0]
         return
     
@@ -142,7 +140,7 @@ def track_object(objs,labels):
     for obj in objs:
         lbl=labels.get(obj.id, obj.id)
         if (lbl==object_to_track):
-            x_min, y_min, x_max, y_max = list(obj.bbox)
+            x_min, y_min, x_max, y_max = list(obj.bbox) # set the bouding box for the object identified
             flag=1
             # can add the code here that would look for objects that might be in the way of the person
             break
@@ -153,7 +151,8 @@ def track_object(objs,labels):
         return
 
     # calculating the angles and directions the robot has to move    
-    x_diff=x_max-x_min
+    # the two lines below calculate the length and the width of the bounding box
+    x_diff=x_max-x_min 
     y_diff=y_max-y_min
     print("x_diff: ",round(x_diff,5))
     print("y_diff: ",round(y_diff,5))
@@ -167,7 +166,7 @@ def track_object(objs,labels):
     
     #print("[",obj_x_center, obj_y_center,"]")
         
-    x_deviation=round(0.5-obj_x_center,3)
+    x_deviation=round(0.5-obj_x_center,3) # this is the horizontal distance between the center of the object and the center of the frame. need to use this somehow to calculate the angle
     y_max=round(y_max,3)
         
     print("{",x_deviation,y_max,"}")
@@ -193,17 +192,15 @@ def move_robot():
     
     if(abs(x_deviation)<tolerance):
         delay1=0
+        # the code below makes the robot move forward until the value of y is less than 1. instead we will use the distance from the depth map
         if(y<0.1):
             cmd="Stop"
-            ut.red_light("ON")
             ut.stop()
         else:
             cmd="forward"
-            ut.red_light("OFF")
             ut.forward()
     
     else:
-        ut.red_light("OFF")
         if(x_deviation>=tolerance):
             cmd="Move Left"
             delay1=get_delay(x_deviation)
@@ -237,14 +234,14 @@ def get_delay(deviation):
     
 def main():
     
-    from util import edgetpu
+    # from util import edgetpu
     
-    if (edgetpu==1):
-        mdl = model_edgetpu
-    else:
-         mdl = model
-        
-    interpreter, labels =cm.load_model(model_dir,mdl,lbl,edgetpu)
+    # if (edgetpu==1):
+    #     mdl = model_edgetpu
+    # else:
+        #  mdl = model
+    mdl = model    
+    interpreter, labels =cm.load_model(model_dir,mdl,lbl)
     
     fps=1
     arr_dur=[0,0,0]
@@ -284,8 +281,10 @@ def main():
        
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
- 
-        cv2_im = append_text_img1(cv2_im, objs, labels, arr_dur, arr_track_data)
+            
+        rgb_np_array = np.array(pil_im)
+        bgr_np_array = cv2.cvtColor(rgb_np_array, cv2.COLOR_RGB2BGR)
+        cv2_im = append_text_img1(bgr_np_array, objs, labels, arr_dur, arr_track_data)
        # cv2.imshow('Object Tracking - TensorFlow Lite', cv2_im)
         
         ret, jpeg = cv2.imencode('.jpg', cv2_im)
