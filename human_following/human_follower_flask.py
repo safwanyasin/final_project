@@ -448,6 +448,9 @@ def capture_rgb():
     pipeline.start(config)
 
     try:
+        device = pipeline.get_active_profile().get_device()
+        sensor = device.query_sensors()[1]  # Assuming the second sensor is the RGB sensor
+        sensor.set_option(rs.option.exposure, 156)
         frames = pipeline.wait_for_frames()
         color_frame = frames.get_color_frame()
 
@@ -540,17 +543,18 @@ def track_object(objs, labels):
     depth_frame = capture_depth()
     x_coordinate = int(obj_x_center * 680)
     y_coordinate = int(obj_y_center * 480)
+    adj_y_coordinate =  int(y_coordinate * 1.2)
     print('x center is ', x_coordinate)
     print('y center is ', y_coordinate)
-
+    print('adj_y_coordinate is ', adj_y_coordinate)
     # getting the distance  between the center point and the camera
     distance_to_object = depth_frame.get_distance(x_coordinate, y_coordinate)
     print("distance to object:", distance_to_object)
-    second_distance = depth_frame.get_distance(int(obj_x_center), int(obj_y_center * 480 * 1.2))
+    second_distance = depth_frame.get_distance(x_coordinate, adj_y_coordinate)
     print("second distance to object:", second_distance)
     if (second_distance < distance_to_object):
         distance_to_object = second_distance
-    
+    arr_track_data[3] = distance_to_object
 
 def move_robot():
     global x_deviation, y_max, tolerance, arr_track_data, distance_to_object
@@ -673,7 +677,7 @@ def append_text_img1(cv2_im, objs, labels, arr_dur, arr_track_data):
     x = round(arr_track_data[0], 3)
     y = round(arr_track_data[1], 3)
     deviation = round(arr_track_data[2], 3)
-    dist = round(1 - arr_track_data[3], 3)
+    dist = round(arr_track_data[3], 3)
     cmd = arr_track_data[4]
    
     text_track = 'x: {}   y: {}   deviation: {}   dist: {}   tolerance: {}   cmd: {}'.format(x, y, deviation, dist, tolerance, cmd)
