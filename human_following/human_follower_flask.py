@@ -401,6 +401,8 @@ from PIL import Image
 import time
 from threading import Thread
 import pyrealsense2 as rs
+from pyzbar.pyzbar import decode
+import math
 
 import sys
 sys.path.insert(0, '/var/www/html/earthrover')
@@ -415,13 +417,26 @@ model = 'mobilenet_ssd_v2_coco_quant_postprocess.tflite'
 model_edgetpu = 'mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite'
 lbl = 'coco_labels.txt'
 
-tolerance=0.15 # changed from 0.1 to 0.15
+tolerance= 90 
 x_deviation=0
 y_max=0
 arr_track_data=[0,0,0,0,0,0]
 distance_to_object = 999 # decide initial value for this
-
+previous_distance = 999
+theta = 0
+previous_theta = 0
 object_to_track='person'
+kpx = 2
+kpy = 2
+kp_theta = 0.5
+r = 0.06
+R = 0.15
+al2 = (2 * math.pi) / 3
+al3 = (4 * math.pi) / 3
+min_angular_velocity = 0
+max_angular_velocity = 50
+min_pwm_value = 0
+max_pwm_value = 255
 
 #---------Flask----------------------------------------
 from flask import Flask, Response
@@ -439,6 +454,13 @@ def video_feed():
     #global cap
     return Response(main(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+def map_value(x, in_min, in_max, out_min, out_max):
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+def constrain(val, min_val, max_val):
+    return max(min(val, max_val), min_val)
                     
 def capture_rgb():
     pipeline = rs.pipeline()
@@ -495,23 +517,23 @@ def capture_depth():
     finally:
         pipeline.stop()
 
-def track_object(objs, labels):
-    global x_deviation, y_max, tolerance, arr_track_data, distance_to_object
+def track_object(objs, labels, qr_coordinates):
+    global x_deviation, y_max, tolerance, arr_track_data, distance_to_object, previous_distance, previous_theta, theta
     
     if(len(objs) == 0):
         print("no objects to track")
         print("Stopping the robot and turning off the red light")
         arr_track_data = [0, 0, 0, 0, 0, 0]
         return
-    
     flag = 0
     for obj in objs:
         lbl = labels.get(obj.id, obj.id)
         if (lbl == object_to_track):
             x_min, y_min, x_max, y_max = list(obj.bbox)
-            flag = 1
-            # can add the code here that would look for objects that might be in the way of the person
-            break
+            # checks if the qr is within bounding box of the person
+            if (qr_coordinates[0] >= int(x_min * 640) and qr_coordinates[0] <= int(x_max * 640) and qr_coordinates[1] >= int(y_min * 480) and qr_coordinates[1] <= int(y_max * 480)):
+                flag = 1
+                break
         
     if(flag == 0):
         print("selected object not present")
@@ -528,7 +550,7 @@ def track_object(objs, labels):
     obj_y_center = y_min + (y_diff / 2)
     obj_y_center = round(obj_y_center, 3) # center y point of the person
     
-    x_deviation = round(0.5 - obj_x_center, 3)
+    # x_deviation = round(0.5 - obj_x_center, 3)
     y_max = round(y_max, 3)
         
     print("{", x_deviation, y_max, "}")
@@ -538,32 +560,76 @@ def track_object(objs, labels):
     
     arr_track_data[0] = obj_x_center
     arr_track_data[1] = obj_y_center
-    arr_track_data[2] = x_deviation
+    # arr_track_data[2] = x_deviation
     # arr_track_data[3] = y_max
     depth_frame = capture_depth()
-    x_coordinate = int(obj_x_center * 680)
+    x_coordinate = int(obj_x_center * 640)
     y_coordinate = int(obj_y_center * 480)
     adj_y_coordinate =  int(y_coordinate * 1.2)
     print('x center is ', x_coordinate)
     print('y center is ', y_coordinate)
     print('adj_y_coordinate is ', adj_y_coordinate)
+    x_deviation = x_coordinate - 320
+    arr_track_data[2] = x_deviation
+    previous_theta = theta
+    theta = (35/320) * x_deviation
+    print('angle', theta)
     # getting the distance  between the center point and the camera
+    previous_distance = distance_to_object
     distance_to_object = depth_frame.get_distance(x_coordinate, y_coordinate)
     print("distance to object:", distance_to_object)
     second_distance = depth_frame.get_distance(x_coordinate, adj_y_coordinate)
     print("second distance to object:", second_distance)
-    if (second_distance < distance_to_object):
-        distance_to_object = second_distance
+    # if (second_distance < distance_to_object):
+    #     distance_to_object = second_distance
     arr_track_data[3] = distance_to_object
 
 def move_robot():
-    global x_deviation, y_max, tolerance, arr_track_data, distance_to_object
+    global x_deviation, y_max, tolerance, arr_track_data, distance_to_object, theta, previous_distance, previous_theta
     
     print("moving robot .............!!!!!!!!!!!!!!")
     print(x_deviation, tolerance, arr_track_data)
     
-    y = distance_to_object #distance from bottom of the frame. this is being used to move the robot forward change it so it uses the value from the depth map
-    
+    y = distance_to_object
+    angle = math.radians(theta)
+
+    target_distance_x = math.cos(angle) * y
+    target_distance_y = math.sin(angle) * y
+
+    distance_error_x = target_distance_x - math.cos(math.radians(previous_theta)) * previous_distance
+    distance_error_y = target_distance_y - math.sin(math.radians(previous_theta)) * previous_distance
+    angle_error = 0 - angle
+
+    control_signal_x = kpx * distance_error_x
+    control_signal_y = kpy * distance_error_y
+    # control_signal_theta = kp_theta * angle_error
+    control_signal_theta = 0 # only allows crab walk movement - no rotation
+
+    dots = [control_signal_x, control_signal_y, control_signal_theta]
+
+    # update wheel velocities
+    matrix_jac = [
+        [-math.sin(0), math.cos(0), R],
+        [-math.sin(0 + al2), math.cos(0 + al2), R],
+        [-math.sin(0 + al3), math.cos(0 + al3), R]
+    ]
+    print(matrix_jac)
+    matrix_wheel_dots = [0, 0, 0] # wheel velocities [20, 20, -20]
+    for i in range(3):
+        for j in range(3):
+            matrix_wheel_dots[i] += matrix_jac[i][j] * dots[j]
+        matrix_wheel_dots[i] /= r
+    print('matrix_wheel_dots', matrix_wheel_dots)
+    pwm_values = [0, 0, 0]
+    for i in range(3):
+        pwm_values[i] = map_value(abs(matrix_wheel_dots[i]), min_angular_velocity, max_angular_velocity, min_pwm_value, max_pwm_value)
+        pwm_values[i] = constrain(pwm_values[i], min_pwm_value, max_pwm_value)
+
+    for i in range(3):
+        if matrix_wheel_dots[i] < 0:
+            pwm_values[i] = -1 * pwm_values[i] # these values would be sent to arduino
+    print('pwm values', pwm_values)
+
     if(abs(x_deviation) < tolerance):
         delay1 = 0
         if(y < 0.5):
@@ -592,11 +658,11 @@ def move_robot():
 
 def get_delay(deviation):
     deviation = abs(deviation)
-    if(deviation >= 0.4):
+    if(deviation >= 250):
         d = 0.080
-    elif(deviation >= 0.35 and deviation < 0.40):
+    elif(deviation >= 220 and deviation < 250):
         d = 0.060
-    elif(deviation >= 0.20 and deviation < 0.35):
+    elif(deviation >= 130 and deviation < 220):
         d = 0.050
     else:
         d = 0.040
@@ -632,11 +698,21 @@ def main():
         objs = cm.get_output(interpreter, score_threshold=threshold, top_k=top_k)
         
         arr_dur[1] = time.time() - start_t1
+        # add code here that would use the pil image to find a qr code and look for its contents. then pass it into the track_object function
+        decoded_qrs = decode(pil_im)
+        qr_coordinates = [0, 0]
+        for qr in decoded_qrs:
+            if qr.data.decode('utf-8') == 'ens492_self_following':
+                # Return the coordinates of the QR code
+                print('left coordinate is:', qr.rect.left)
+                print('top coordinate is:', qr.rect.top)
+                qr_coordinates[0] = int(qr.rect.left + qr.rect.width/2)
+                qr_coordinates[1] = int(qr.rect.top + qr.rect.height/2)
         #----------------------------------------------------
        
        #-----------------other------------------------------------
         start_t2 = time.time()
-        track_object(objs, labels)#tracking  <<<<<<<
+        track_object(objs, labels, qr_coordinates)#tracking  <<<<<<<
        
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
@@ -697,7 +773,7 @@ def append_text_img1(cv2_im, objs, labels, arr_dur, arr_track_data):
         #add bbox
         cv2_im = cv2.rectangle(cv2_im, (x_min, y_min), (x_max, y_max), (0, 255, 0), 1)
         #add label
-        cv2_im = cv2.putText(cv2_im, "c", (int(x * 680), int(y * 480 * 1.2)), font, 0.4, (0, 255, 0), 1)
+        cv2_im = cv2.putText(cv2_im, "c", (int(x * 640), int(y * 480 * 1.2)), font, 0.4, (0, 255, 0), 1)
         cv2_im = cv2.putText(cv2_im, label, (x_min, y_min + 10), font, 0.4, (0, 255, 0), 1)
 
     return cv2_im
