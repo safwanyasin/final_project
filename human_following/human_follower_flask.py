@@ -403,7 +403,7 @@ from threading import Thread
 import pyrealsense2 as rs
 from pyzbar.pyzbar import decode
 import math
-
+import serial
 import sys
 sys.path.insert(0, '/var/www/html/earthrover')
 import util as ut
@@ -455,6 +455,13 @@ def video_feed():
     return Response(main(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
+ser = serial.Serial('COM3', 9600)  # Update 'COM3' to the appropriate port
+
+def send_pwm_values(pwm_values):
+    for pwm in pwm_values:
+        ser.write(str(pwm).encode())
+        ser.write(b'\n')  # Send newline as a delimiter
+    ser.flush()
 
 def map_value(x, in_min, in_max, out_min, out_max):
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
@@ -521,7 +528,7 @@ def track_object(objs, labels, qr_coordinates):
     global x_deviation, y_max, tolerance, arr_track_data, distance_to_object, previous_distance, previous_theta, theta
     
     if(len(objs) == 0):
-        print("no objects to track")
+        print("no objects to track") 
         print("Stopping the robot and turning off the red light")
         arr_track_data = [0, 0, 0, 0, 0, 0]
         return
@@ -537,6 +544,7 @@ def track_object(objs, labels, qr_coordinates):
         
     if(flag == 0):
         print("selected object not present")
+        arr_track_data[4] = "obj not present"
         return
 
     x_diff = x_max - x_min
@@ -630,6 +638,8 @@ def move_robot():
             pwm_values[i] = -1 * pwm_values[i] # these values would be sent to arduino
     print('pwm values', pwm_values)
 
+    send_pwm_values(pwm_values)
+    
     if(abs(x_deviation) < tolerance):
         delay1 = 0
         if(y < 0.5):
@@ -737,7 +747,7 @@ def append_text_img1(cv2_im, objs, labels, arr_dur, arr_track_data):
     height, width, channels = cv2_im.shape
     font = cv2.FONT_HERSHEY_SIMPLEX
     
-    global tolerance
+    global tolerance, theta
     
     #draw black rectangle on top
     cv2_im = cv2.rectangle(cv2_im, (0, 0), (width, 24), (0, 0, 0), -1)
@@ -756,7 +766,7 @@ def append_text_img1(cv2_im, objs, labels, arr_dur, arr_track_data):
     dist = round(arr_track_data[3], 3)
     cmd = arr_track_data[4]
    
-    text_track = 'x: {}   y: {}   deviation: {}   dist: {}   tolerance: {}   cmd: {}'.format(x, y, deviation, dist, tolerance, cmd)
+    text_track = 'x: {}   y: {}   deviation: {}   dist: {}   angle: {}   cmd: {}'.format(x, y, deviation, dist, theta, cmd)
     cv2_im = cv2.putText(cv2_im, text_track, (10, height - 10), font, 0.4, (0, 0, 255), 1)
    
     #draw bounding boxes
@@ -773,7 +783,7 @@ def append_text_img1(cv2_im, objs, labels, arr_dur, arr_track_data):
         #add bbox
         cv2_im = cv2.rectangle(cv2_im, (x_min, y_min), (x_max, y_max), (0, 255, 0), 1)
         #add label
-        cv2_im = cv2.putText(cv2_im, "c", (int(x * 640), int(y * 480 * 1.2)), font, 0.4, (0, 255, 0), 1)
+        # cv2_im = cv2.putText(cv2_im, "c", (int(x * 640), int(y * 480 * 1.2)), font, 0.4, (0, 255, 0), 1)
         cv2_im = cv2.putText(cv2_im, label, (x_min, y_min + 10), font, 0.4, (0, 255, 0), 1)
 
     return cv2_im
