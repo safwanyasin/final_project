@@ -435,14 +435,16 @@ al2 = (2 * math.pi) / 3
 al3 = (4 * math.pi) / 3
 min_angular_velocity = 0
 max_angular_velocity = 50
-min_pwm_value = 0
+min_pwm_value = 150
 max_pwm_value = 255
+ser = ''
 
 #---------Flask----------------------------------------
 from flask import Flask, Response
 from flask import render_template
 
 app = Flask(__name__)
+
 
 @app.route('/')
 def index():
@@ -455,18 +457,32 @@ def video_feed():
     return Response(main(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
-ser = serial.Serial('COM3', 9600)  # Update 'COM3' to the appropriate port
+
 
 def send_pwm_values(pwm_values):
-    for pwm in pwm_values:
-        ser.write(str(pwm).encode())
-        ser.write(b'\n')  # Send newline as a delimiter
-    ser.flush()
+    global ser
+    # for pwm in pwm_values:
+        # print('sending', )
+        # ser.write(str(pwm).encode())
+        # ser.write(b'\n')  # Send newline as a delimiter
+    # ser.flush()
+    print("sending", pwm_values)
+    ser.write(bytes(str(pwm_values), 'utf-8'))
+    time.sleep(1)
+    while ser.in_waiting > 0:
+        data = ser.readline().decode('utf-8').strip()
+        print("Received:", data)
+    data = ser.readline()
+    print(data)
 
 def map_value(x, in_min, in_max, out_min, out_max):
+    if x == 0.0:
+        return 0
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
 def constrain(val, min_val, max_val):
+    if val == 0.0:
+        return 0
     return max(min(val, max_val), min_val)
                     
 def capture_rgb():
@@ -544,6 +560,7 @@ def track_object(objs, labels, qr_coordinates):
         
     if(flag == 0):
         print("selected object not present")
+        send_pwm_values([0, 0, 0])
         arr_track_data[4] = "obj not present"
         return
 
@@ -634,12 +651,13 @@ def move_robot():
         pwm_values[i] = constrain(pwm_values[i], min_pwm_value, max_pwm_value)
 
     for i in range(3):
+        pwm_values[i] = int(pwm_values[i])
         if matrix_wheel_dots[i] < 0:
             pwm_values[i] = -1 * pwm_values[i] # these values would be sent to arduino
     print('pwm values', pwm_values)
 
     send_pwm_values(pwm_values)
-    
+
     if(abs(x_deviation) < tolerance):
         delay1 = 0
         if(y < 0.5):
@@ -680,7 +698,7 @@ def get_delay(deviation):
     
 def main():
     from util import edgetpu
-    
+    global ser
     if (edgetpu == 1):
         mdl = model_edgetpu
     else:
@@ -690,7 +708,7 @@ def main():
     
     fps = 1
     arr_dur = [0, 0, 0]
-    
+    ser = serial.Serial('COM6', 9600)  # Update 'COM3' to the appropriate port
     while True:
         start_time = time.time()
         #----------------Capture Camera Frame-----------------
@@ -790,3 +808,6 @@ def append_text_img1(cv2_im, objs, labels, arr_dur, arr_track_data):
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=8000, debug=True, threaded=True)
+    
+    
+    
