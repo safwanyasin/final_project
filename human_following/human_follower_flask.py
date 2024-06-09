@@ -438,6 +438,7 @@ max_angular_velocity = 50
 min_pwm_value = 150
 max_pwm_value = 255
 ser = ''
+min_dist_threshold = 0.5
 
 #---------Flask----------------------------------------
 from flask import Flask, Response
@@ -468,10 +469,10 @@ def send_pwm_values(pwm_values):
     # ser.flush()
     print("sending", pwm_values)
     ser.write(bytes(str(pwm_values), 'utf-8'))
-    time.sleep(1)
-    while ser.in_waiting > 0:
-        data = ser.readline().decode('utf-8').strip()
-        print("Received:", data)
+    # time.sleep(1)
+    # while ser.in_waiting > 0:
+    #     data = ser.readline().decode('utf-8').strip()
+    #     print("Received:", data)
     data = ser.readline()
     print(data)
 
@@ -610,7 +611,7 @@ def track_object(objs, labels, qr_coordinates):
     arr_track_data[3] = distance_to_object
 
 def move_robot():
-    global x_deviation, y_max, tolerance, arr_track_data, distance_to_object, theta, previous_distance, previous_theta
+    global min_dist_threshold, x_deviation, y_max, tolerance, arr_track_data, distance_to_object, theta, previous_distance, previous_theta
     
     print("moving robot .............!!!!!!!!!!!!!!")
     print(x_deviation, tolerance, arr_track_data)
@@ -640,10 +641,11 @@ def move_robot():
     ]
     print(matrix_jac)
     matrix_wheel_dots = [0, 0, 0] # wheel velocities [20, 20, -20]
-    for i in range(3):
-        for j in range(3):
-            matrix_wheel_dots[i] += matrix_jac[i][j] * dots[j]
-        matrix_wheel_dots[i] /= r
+    if y >= 0.5:
+        for i in range(3):
+            for j in range(3):
+                matrix_wheel_dots[i] += matrix_jac[i][j] * dots[j]
+            matrix_wheel_dots[i] /= r
     print('matrix_wheel_dots', matrix_wheel_dots)
     pwm_values = [0, 0, 0]
     for i in range(3):
